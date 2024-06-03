@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+const app = require('../app');
+const debug = require('debug')('socketservice:server');
+const http = require('http');
+const websocket = require('ws');
+const moment = require('moment');
+const uuid = require('uuid');
+const dateFormat = 'yyyy-MM-ddTHH:mm:ss.SSS';
+const fortunes = require('../data/fortune.json');
+
+/**
+ * Initialize the web socket server
+ */
+var port = normalizePort(process.env.PORT || '3000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+const server = http.createServer(app);
+
+// Set up a headless websocket server that prints any
+// events that come in.
+const webSocketServer = new websocket.Server({ noServer: true });
+webSocketServer.on('connection', socket => {
+
+  socket.on('message', message => {
+    const entries = Object.entries(fortunes);
+    const randomKey = entries.length * Math.random() << 0;
+    const sayings = entries[randomKey][1];
+    const randomFortune = sayings[sayings.length * Math.random() << 0];
+
+    const payload = {
+      id: uuid.v4(),
+      timestamp: moment().format(dateFormat),
+      yourMessage: `${message}`,
+      myMessage: randomFortune
+    };
+
+    const reply = JSON.stringify(payload, null, 2);
+    console.log(reply);
+    console.log('--------------');
+
+    socket.send(`${reply}`);
+  });
+
+  const confirmation = {
+    id: uuid.v4(),
+    timestamp: moment().format(dateFormat),
+    myMessage: 'Greetings, Earthling.\nYou may now communicate!'
+  };
+
+  const confirmConnection = JSON.stringify(confirmation, null, 2);
+
+  socket.send(confirmConnection);
+  console.log(confirmConnection);
+});
+
+// `server` is a vanilla Node.js HTTP server, so use
+// the same ws upgrade process described here:
+// https://www.npmjs.com/package/ws#multiple-servers-sharing-a-single-https-server
+// const server = app.listen(3000);
+server.on('upgrade', (request, socket, head) => {
+  webSocketServer.handleUpgrade(request, socket, head, socket => {
+    webSocketServer.emit('connection', socket, request);
+  });
+});
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+console.log(`Listening on port: ${port}`);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
